@@ -3,14 +3,13 @@ import { logoutUserApi } from '../api/userApi';
 import { toast } from 'react-toastify';
 import { useEffect, useState } from 'react';
 import { MdOutlineEdit, MdDeleteOutline } from "react-icons/md";
-import { useDispatch, useSelector } from 'react-redux';
 import { addTaskApi, deleteTaskApi, editTaskApi, getTaskApi } from '../api/taskApi';
-import { addTodos, deleteTodos, editTodos, setTodos } from '../store/todoSlice';
 import { DndContext, DragOverlay } from '@dnd-kit/core';
 import { useSortable, SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useDroppable } from '@dnd-kit/core';
 import { List, AutoSizer } from 'react-virtualized';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import '../App.css';
 
 function DroppableColumn({ status, children }) {
@@ -33,25 +32,50 @@ function DraggableTask({ task, onClick, onDelete }) {
   return (
     <div
       ref={setNodeRef}
-      {...listeners}
-      {...attributes}
       style={style}
-      onClick={onClick}
-      className="bg-white p-4 rounded shadow mb-3 hover:shadow-md cursor-pointer"
+      className="bg-white p-4 rounded shadow hover:shadow-md"
     >
-      <h3 className="font-bold">{task.title}</h3>
-      <p>{task.description}</p>
-      <div className="text-xs text-gray-500 mt-2">
-        <p><span className='text-sm text-gray-800 font-semibold'>Created:</span> {new Date(task.createdAt).toLocaleString()}</p>
-        <p><span className='text-sm text-gray-800 font-semibold'>Updated:</span> {new Date(task.updatedAt).toLocaleString()}</p>
+      {/* Drag Handle Only */}
+      <div
+        {...attributes}
+        {...listeners}
+      >
+      <div onClick={() => onClick(task)} className="cursor-pointer">
+        <h3 className="font-bold">{task.title}</h3>
+        <p>{task.description}</p>
+        <div className="text-xs text-gray-500 mt-2">
+          <p><span className='text-sm text-gray-800 font-semibold'>Created:</span> {new Date(task.createdAt).toLocaleString()}</p>
+          <p><span className='text-sm text-gray-800 font-semibold'>Updated:</span> {new Date(task.updatedAt).toLocaleString()}</p>
+        </div>
       </div>
+      </div>
+
+      {/* Task Content */}
+      
+
+      {/* Buttons */}
       <div className="flex justify-between mt-2">
         <span className="bg-blue-100 px-2 py-1 rounded text-xs">{task.status}</span>
-        <div>
-          <button onClick={(e) => onClick(task)} className="text-green-600 w-5 h-7 p-1">
+        <div className="flex gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onClick(task);
+            }}
+            className="text-green-600 w-5 h-7 p-1 cursor-pointer"
+          >
             <MdOutlineEdit />
           </button>
-          <button onClick={(e) => onDelete(task._id, e)} className="text-red-500 w-5 h-7 p-1">
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onDelete(task._id, e);
+            }}
+            className="text-red-500 w-5 h-7 p-1 cursor-pointer"
+          >
             <MdDeleteOutline />
           </button>
         </div>
@@ -59,6 +83,7 @@ function DraggableTask({ task, onClick, onDelete }) {
     </div>
   );
 }
+
 
 function VirtualTaskList({ tasks, onEdit, onDelete }) {
   const rowRenderer = ({ key, index, style }) => (
@@ -90,8 +115,7 @@ function VirtualTaskList({ tasks, onEdit, onDelete }) {
 
 function Home() {
   const navigate = useNavigate();
-  const dispatch = useDispatch();
-  const todos = useSelector((state) => state.todos);
+  const queryClient = useQueryClient();
 
   const [user, setUser] = useState(() => {
     const userStore = localStorage.getItem('user');
@@ -105,31 +129,40 @@ function Home() {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [activeId, setActiveId] = useState(null);
 
+
   const statusOptions = [
     { label: 'Pending', value: 'Pending' },
     { label: 'In Progress', value: 'In Progress' },
     { label: 'Completed', value: 'Completed' },
   ];
 
-  const activeTask = todos.find((task) => task._id === activeId);
-
   useEffect(() => {
     if (!user) navigate('/login');
-    else setUser(user);
-  }, []);
+  }, [user, navigate]);
 
-  const loadTasks = async () => {
-    try {
-      const res = await getTaskApi(user._id);
-      dispatch(setTodos(res?.task));
-    } catch (err) {
-      toast.error('Failed to load tasks');
-    }
-  };
+  const { data: taskData, error, isLoading } = useQuery({
+    queryKey: ['tasks', user?._id],
+    queryFn: () => getTaskApi(user._id),
+    enabled: !!user,
+    refetchInterval:5000
+  });
 
-  useEffect(() => {
-    loadTasks();
-  }, [dispatch]);
+  const todos = taskData?.task || [];
+
+  const addTaskMutation = useMutation({
+    mutationFn: addTaskApi,
+    onSuccess: () => queryClient.invalidateQueries(['tasks', user._id])
+  });
+
+  const editTaskMutation = useMutation({
+    mutationFn: ({ id, data }) => editTaskApi(id, data),
+    onSuccess: () => queryClient.invalidateQueries(['tasks', user._id])
+  });
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: deleteTaskApi,
+    onSuccess: () => queryClient.invalidateQueries(['tasks', user._id])
+  });
 
   const handleLogout = async () => {
     try {
@@ -147,12 +180,10 @@ function Home() {
 
     try {
       if (editId) {
-        const res = await editTaskApi(editId, IsTask);
-        dispatch(editTodos(res?.task));
+        await editTaskMutation.mutateAsync({ id: editId, data: IsTask });
         toast.success('Task updated successfully!');
       } else {
-        const res = await addTaskApi(IsTask);
-        dispatch(addTodos(res?.task));
+        await addTaskMutation.mutateAsync({ ...IsTask, userId: user._id });
         toast.success('Task added successfully!');
       }
       closeModal();
@@ -172,14 +203,13 @@ function Home() {
 
   const openModal = () => {
     setTaskModal(true);
-    setTimeout(() => setIsModalVisible(true), 10);
+    setTimeout(() => setIsModalVisible(true), 10)
   };
 
   const handleDelete = async (id, e) => {
-    e.preventDefault();
+    e?.stopPropagation();
     try {
-      await deleteTaskApi(id);
-      dispatch(deleteTodos(id));
+      await deleteTaskMutation.mutateAsync(id);
       toast.success('Task deleted successfully!');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Task deletion failed');
@@ -188,12 +218,13 @@ function Home() {
 
   const handleEdit = (task) => {
     setEditId(task._id);
+      
     setIsTask({ title: task.title, description: task.description, status: task.status });
     openModal();
   };
 
   const getTasksByStatus = (status) => {
-    return todos?.filter((task) => task.status === status) || [];
+    return todos.filter((task) => task.status === status);
   };
 
   const handleDragEnd = async (event) => {
@@ -215,8 +246,10 @@ function Home() {
 
     if (!sameColumn) {
       try {
-        const res = await editTaskApi(active.id, { status: overStatus });
-        dispatch(editTodos(res.task));
+        await editTaskMutation.mutateAsync({
+          id: active.id,
+          data: { status: overStatus }
+        });
         toast.success('Task moved to another column!');
       } catch {
         toast.error('Move failed');
@@ -228,11 +261,23 @@ function Home() {
 
       if (oldIndex !== newIndex) {
         const reordered = arrayMove(tasksInColumn, oldIndex, newIndex);
-        const otherTasks = todos.filter((t) => t.status !== activeStatus);
-        dispatch(setTodos([...otherTasks, ...reordered]));
+        queryClient.setQueryData(['tasks', user._id], (oldData) => {
+          if (!oldData?.task) return oldData;
+          const otherTasks = oldData.task.filter((t) => t.status !== activeStatus);
+          return {
+            ...oldData,
+            task: [...otherTasks, ...reordered],
+          };
+        });
       }
     }
   };
+
+
+  const activeTask = activeId ? todos.find((task) => task._id === activeId) : null;
+
+  if (isLoading) return <div className="text-center py-8">Loading tasks...</div>;
+  if (error) return <div className="text-center py-8 text-red-500">Error loading tasks</div>;
 
   return (
     <div className="p-6 min-h-screen bg-gray-100">
@@ -240,10 +285,10 @@ function Home() {
       <header className="flex flex-wrap justify-between items-center mb-8">
         <div className="w-3/4 mx-auto">
           <div className="bg-blue-400/5 py-4 px-6 rounded mb-4 sm:flex justify-between items-center border-blue-100 border">
-            <p className="font-semibold">{user.firstName} {user.lastName}</p>
-            <p className="font-semibold">{user.email}</p>
+            <p className="font-semibold">{user?.firstName} {user?.lastName}</p>
+            <p className="font-semibold">{user?.email}</p>
             <ul className="sm:pl-6 font-semibold">
-              {user.numbers?.map((number, index) => (
+              {user?.numbers?.map((number, index) => (
                 <li key={index}>{number}</li>
               ))}
             </ul>
@@ -270,7 +315,7 @@ function Home() {
                   <h2 className="font-bold text-lg mb-4 flex justify-between items-center">
                     {status.label}
                     <span className="bg-gray-300 px-2 py-1 rounded-full text-sm">
-                      {tasks.length || 0}
+                      {tasks.length}
                     </span>
                   </h2>
                   <VirtualTaskList tasks={tasks} onEdit={handleEdit} onDelete={handleDelete} />
@@ -281,14 +326,18 @@ function Home() {
         </div>
 
         <DragOverlay>
-          {activeTask && (
-            <DraggableTask task={activeTask} onClick={() => {}} onDelete={() => {}} />
-          )}
+          {activeTask ? (
+            <DraggableTask
+              task={activeTask}
+              onClick={() => {handleEdit(activeTask)}}
+              onDelete={(id, e) => handleDelete(activeTask._id, e)}
+            />
+          ) : null}
         </DragOverlay>
       </DndContext>
 
       {taskModal && (
-        <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 transition-opacity duration-300 ${isModalVisible ? 'opacity-100' : 'opacity-0'}`}>
+        <div className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 transition-opacity duration-300 ${isModalVisible ? 'opacity-100' : 'opacity-0'}`}>
           <div className={`bg-white rounded-lg shadow-xl w-full max-w-md p-8 transform transition-all duration-300 ${isModalVisible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}`}>
             <div className="flex justify-between items-center mb-5">
               <h2 className="text-xl font-semibold">{editId ? 'Edit Task' : 'Add New Task'}</h2>
@@ -328,7 +377,7 @@ function Home() {
                 </div>
                 {statusDropdownOpen && (
                   <ul className='border rounded mt-2'>
-                    {statusOptions?.map((option) => (
+                    {statusOptions.map((option) => (
                       <li
                         key={option.value}
                         onClick={() => {

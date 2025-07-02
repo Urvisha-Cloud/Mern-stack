@@ -1,35 +1,59 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
 
-function App() {
-  const [count, setCount] = useState(0)
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import Home from './pages/Home';
+import { Navigate } from 'react-router-dom';
+import { ToastContainer, Slide } from 'react-toastify';
+import "./App.css";
+import 'react-toastify/dist/ReactToastify.css';
+import { Suspense, lazy } from 'react';
 
+const About = lazy(()=> import('./pages/About'));
+
+// const Home = lazy(()=> import('./pages/Home'))
+
+const Protected = ({ children }) => {
+  const user = localStorage.getItem("user");
+  return user ? children : <Navigate to="/login" />;
+};
+
+const App = () => {
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
-}
+    
+    <Router>
+      <ToastContainer
+        position="top-right"
+        hideProgressBar
+        transition={Slide}
+        className="toast"
+        draggable
+      />
+      <Routes>
+        <Route path="/" element={<Login />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route
+          path="/home"
+          element={
+            <Protected>
+              {/* <Suspense fallback={<div>Loading Home Page...</div>}> */}
+                <Home />
+              {/* </Suspense> */}
+            </Protected>
+          }
+        />
 
-export default App
+        <Route path="/about" element={
+          <Suspense>
+            <About />
+          </Suspense>
+        } />
+      </Routes>
+    </Router>
+  );
+};
+
+export default App;
+
+
