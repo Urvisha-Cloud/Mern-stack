@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.Toastify__toast {
+  border-radius: 8px;
+  padding: 14px 20px;
+  font-size: 14px;
+  font-family: 'Roboto', 'Helvetica Neue', sans-serif;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16);
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  line-height: 1.5;
+  letter-spacing: 0.3px;
+}
+
+.Toastify__toast--success {
+  background-color: rgba(230, 244, 234, 0.5);
+  color: #202124;
+  border-left: 4px solid #34a853;
+}
+
+.Toastify__toast--error {
+  background-color: rgba(255, 242, 242, 0.5);
+  color: #202124;
+  border-left: 4px solid #d93025;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
